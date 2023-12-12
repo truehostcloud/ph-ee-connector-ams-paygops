@@ -1,0 +1,70 @@
+trigger:
+  - main
+  - develop
+
+pr:
+  - main
+  - develop
+
+pool:
+  vmImage: "ubuntu-latest"
+
+steps:
+  - task: GetRevision@1
+    displayName: "Get Revision"
+    inputs:
+      VariableName: Revision
+
+  - script: |
+      VERSION_TAG=`./gradlew -q printVersion`
+      echo "##vso[task.setvariable variable=VERSION_TAG]$VERSION_TAG"
+      IMAGE_TAGS="${VERSION_TAG}.$(date '+%Y.%m.%d').$(Revision)"
+      echo "##vso[task.setvariable variable=IMAGE_SEMANTIC_HASH]$IMAGE_TAGS"
+      if [[ "$(Build.SourceBranch)" == "refs/heads/main" ]]; then IMAGE_TAGS="$VERSION_TAG,latest"; fi;
+      echo Tags: $IMAGE_TAGS
+      echo repo: $(Build.Repository.Name)
+      echo "##vso[task.setvariable variable=IMAGE_TAGS]$IMAGE_TAGS"
+    displayName: Generate image tags
+
+  - task: Gradle@3
+    displayName: Gradle build
+    inputs:
+      gradleWrapperFile: "gradlew"
+      tasks: "bootJar :test --info --build-cache"
+      javaHomeOption: "JDKVersion"
+      jdkVersionOption: "1.8"
+
+  - task: Docker@2
+    displayName: Login to Azure registry
+    inputs:
+      containerRegistry: azurecr-oaf
+      command: "login"
+
+  - task: Docker@2
+    displayName: Build image
+    inputs:
+      command: build
+      buildContext: "$(System.DefaultWorkingDirectory)"
+      repository: "oneacrefund/paygops-ams-connector"
+      dockerfile: "$(System.DefaultWorkingDirectory)/Dockerfile"
+      containerRegistry: "azurecr-oaf"
+      tags: |
+        $(IMAGE_TAGS)
+
+  - task: Docker@2
+    displayName: "Push image to registry"
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranchName'], 'main'), eq(variables['Build.SourceBranchName'], 'develop'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')))
+    inputs:
+      containerRegistry: "azurecr-oaf"
+      repository: "oneacrefund/paygops-ams-connector"
+      command: "push"
+      tags: |
+        $(IMAGE_TAGS)
+
+  - task: PublishBuildArtifacts@1
+    displayName: Publish configuration package
+    condition: and(succeeded(), or(eq(variables['Build.SourceBranchName'], 'main'), eq(variables['Build.SourceBranchName'], 'develop'), startsWith(variables['Build.SourceBranch'], 'refs/heads/release/')))
+    inputs:
+      PathtoPublish: $(Build.ArtifactStagingDirectory)
+      ArtifactName: "paygops-ams-connector"
+      publishLocation: "Container"
