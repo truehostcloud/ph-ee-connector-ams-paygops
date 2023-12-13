@@ -70,24 +70,23 @@ public class PaygopsRequestDTO {
     }
 
     public void setPhoneNumber(String phoneNumber) {
-        if (isValidPhoneNumber(phoneNumber)) {
+        if (isValidKenyaNumber(phoneNumber)) {
             this.phoneNumber = phoneNumber.trim();
         }
     }
 
     /**
-     * Checks if a phone number is valid.
+     * Checks if a phone number is a valid Kenyan number.
      * @param phoneNumber the phone number
      * @return true if the phone number is valid
      */
-    private boolean isValidPhoneNumber(String phoneNumber) {
+    private boolean isValidKenyaNumber(String phoneNumber) {
         if (phoneNumber == null) return false;
         String number = phoneNumber.trim();
         if (number.length() == 0) return false;
         try {
-            String fullPhoneNumber = number.startsWith("+") ? number : "+" + number;
             PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
-            Phonenumber.PhoneNumber phone = phoneUtil.parse(fullPhoneNumber, Phonenumber.PhoneNumber.CountryCodeSource.UNSPECIFIED.name());
+            Phonenumber.PhoneNumber phone = phoneUtil.parse(number, "KE");
             return phoneUtil.isValidNumber(phone);
         } catch (NumberParseException e) {
             return false;
