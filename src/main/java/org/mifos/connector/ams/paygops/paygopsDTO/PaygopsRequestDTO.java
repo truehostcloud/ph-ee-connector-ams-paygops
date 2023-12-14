@@ -1,6 +1,10 @@
 package org.mifos.connector.ams.paygops.paygopsDTO;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.i18n.phonenumbers.NumberParseException;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -24,6 +28,7 @@ import lombok.Setter;
 @Setter
 @AllArgsConstructor
 @NoArgsConstructor
+@JsonInclude(JsonInclude.Include.NON_NULL)
 public class PaygopsRequestDTO {
 
     @JsonProperty("transaction_id")
@@ -62,5 +67,29 @@ public class PaygopsRequestDTO {
                 ", country='" + country + '\'' +
                 ", currency='" + currency + '\'' +
                 '}';
+    }
+
+    public void setPhoneNumber(String phoneNumber) {
+        if (isValidKenyaNumber(phoneNumber)) {
+            this.phoneNumber = phoneNumber.trim();
+        }
+    }
+
+    /**
+     * Checks if a phone number is a valid Kenyan number.
+     * @param phoneNumber the phone number
+     * @return true if the phone number is valid
+     */
+    private boolean isValidKenyaNumber(String phoneNumber) {
+        if (phoneNumber == null) return false;
+        String number = phoneNumber.trim();
+        if (number.length() == 0) return false;
+        try {
+            PhoneNumberUtil phoneUtil = PhoneNumberUtil.getInstance();
+            Phonenumber.PhoneNumber phone = phoneUtil.parse(number, "KE");
+            return phoneUtil.isValidNumber(phone);
+        } catch (NumberParseException e) {
+            return false;
+        }
     }
 }
