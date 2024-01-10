@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.0.1
+        
+        * [SER-2207] - Fix error that occurs when parsing paygops validation response body
+
 ## Version 1.0.0
 
         * [SER-2149] - Ensure only valid phone numbers are sent to paygops
