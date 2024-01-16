@@ -1,10 +1,12 @@
 trigger:
   - main
   - develop
+  - release/*
 
 pr:
   - main
   - develop
+  - release/*
 
 pool:
   vmImage: "ubuntu-latest"

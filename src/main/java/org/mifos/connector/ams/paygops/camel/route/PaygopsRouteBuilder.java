@@ -94,7 +94,11 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                             exchange.setProperty(TRANSACTION_ID, exchange.getProperty(TRANSACTION_ID));
                             exchange.setProperty("amount", result.getAmount());
                             exchange.setProperty("currency", result.getCurrency());
-                            exchange.setProperty("msisdn", result.getSender_phone_number().substring(1));
+                            String msisdn = result.getSender_phone_number();
+                            if (msisdn != null && msisdn.trim().length() > 0) {
+                                msisdn = msisdn.substring(1);
+                            }
+                            exchange.setProperty("msisdn", msisdn);
                         } else {
                             setErrorCamelInfo(exchange,"Validation Unsuccessful: Reconciled field returned false",
                                     ErrorCodeEnum.RECONCILIATION.getCode(), result.toString());
