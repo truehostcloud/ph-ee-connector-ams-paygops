@@ -1,0 +1,89 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - 'release/*'
+      - feature/git-actions
+  pull_request:
+    branches:
+      - main
+      - develop
+      - 'release/*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+        persist-credentials: true
+
+    - name: Get Revision
+      run: echo "REVISION=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+    - name: Generate image tags
+      run: |
+        VERSION_TAG=`./gradlew -q printVersion`
+        IMAGE_TAGS="${VERSION_TAG}.$(date '+%Y.%m.%d').$(Revision)"
+        echo "IMAGE_SEMANTIC_HASH=$IMAGE_TAGS"
+        if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then IMAGE_TAGS="$VERSION_TAG,latest"; fi;
+        echo "Tags: $IMAGE_TAGS"
+        echo "repo: ${{ github.repository }}"
+        echo "IMAGE_SEMANTIC_HASH=$IMAGE_TAGS" >> $GITHUB_ENV
+        echo "IMAGE_TAGS=$IMAGE_TAGS" >> $GITHUB_ENV
+        echo "GRADLE_USER_HOME=${HOME}/.gradle" >> $GITHUB_ENV
+        
+    - name: GitGuardian scan
+      uses: GitGuardian/ggshield/actions/secret@v1.23.0
+      env:
+        GITHUB_PUSH_BEFORE_SHA: ${{ github.event.before }}
+        GITHUB_PUSH_BASE_SHA: ${{ github.event.base }}
+        GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
+
+    - name: MegaLinter
+      uses: oxsecurity/megalinter/flavors/cupcake@v7.8.0
+      env:
+        VALIDATE_ALL_CODEBASE: false
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        APPLY_FIXES: all
+        APPLY_FIXES_EVENT: pull_request
+        APPLY_FIXES_MODE: commit
+        GITHUB_STATUS_REPORTER: true
+        GITHUB_COMMENT_REPORTER: true
+        CI: true
+        GITHUB_REF: ${{ github.ref }}
+        GITHUB_REPOSITORY: ${{ github.repository }}
+        GITHUB_TARGET_URL: ${{ github.event.repository.html_url }}/actions/runs/${{ github.run_id }}
+        GITHUB_SHA: ${{ github.sha }}
+    
+    - name: Setup Gradle
+      uses: gradle/gradle-build-action@v3
+      
+    - name: Execute Gradle build
+      run: ./gradlew bootJar :test --info --build-cache 
+ 
+    - name: Login to Azure registry
+      uses: docker/login-action@v1
+      with:
+        registry: oaftech.azurecr.io
+        username: ${{ vars.ACR_PULL_USERNAME }}
+        password: ${{ secrets.ACR_PULL_PASSWORD }}
+
+    - name: Build and push image to container registry
+      uses: docker/build-push-action@v2
+      with:
+        push: true
+        tags: oaftech.azurecr.io/oneacrefund/paygops-ams-connector:${{ env.IMAGE_TAGS }}
+
+    - name: Publish configuration package
+      uses: actions/upload-artifact@v2
+      with:
+        name: paygops-ams-connector
+        path: ${{ github.workspace }}
