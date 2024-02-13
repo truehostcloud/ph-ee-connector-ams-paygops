@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.0.2
+
+        * [SER-2280] - Rename Wallet Operator
+
 ## Version 1.0.1
         
         * [SER-2207] - Fix error that occurs when parsing paygops validation response body
