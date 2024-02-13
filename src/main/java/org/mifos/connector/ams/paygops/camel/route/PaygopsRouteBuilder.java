@@ -40,6 +40,9 @@ public class PaygopsRouteBuilder extends RouteBuilder {
     @Value("${ams.timeout}")
     private Integer amsTimeout;
 
+    @Value("${paygops.operator}")
+    private String operatorName;
+
     enum accountStatus{
         ACTIVE,
         REJECTED
@@ -278,7 +281,6 @@ public class PaygopsRouteBuilder extends RouteBuilder {
         String memoId = channelRequest.getJSONObject("payee")
                 .getJSONObject("partyIdInfo").getString("partyIdentifier"); // instead of account id this value corresponds to national id
         JSONObject amountJson = channelRequest.getJSONObject("amount");
-        String operatorName = "MPESA";
 
 
         Long amount = amountJson.getLong("amount");
