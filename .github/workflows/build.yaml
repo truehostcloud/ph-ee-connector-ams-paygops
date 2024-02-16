@@ -7,7 +7,7 @@ on:
       - develop
       - 'release/*'
 
-  pull request:
+  pull_request:
     branches:
       - main
       - develop
@@ -61,5 +61,4 @@ jobs:
           username: ${{ vars.ACR_PULL_USERNAME }}
           password: ${{ secrets.ACR_PULL_PASSWORD }}
       - run: |
-          docker push oaftech.azurecr.io/oneacrefund/paygops-ams-connector:${{ env.IMAGE_TAGS }}  
-          
+          docker push oaftech.azurecr.io/oneacrefund/paygops-ams-connector:${{ env.IMAGE_TAGS }}
