@@ -27,7 +27,7 @@ jobs:
           echo "VERSION_TAG=$VERSION_TAG" >> $GITHUB_ENV
           IMAGE_TAGS="${VERSION_TAG}.$(date '+%Y.%m.%d')"
           echo "IMAGE_SEMANTIC_HASH=$IMAGE_TAGS" >> $GITHUB_ENV
-          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then IMAGE_TAGS="$VERSION_TAG,latest"; fi;
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then IMAGE_TAGS="$VERSION_TAG"; fi;
           echo "IMAGE_TAGS=$IMAGE_TAGS" >> $GITHUB_ENV
       - name: GitGuardian scan
         uses: GitGuardian/ggshield/actions/secret@v1.23.0
