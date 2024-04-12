@@ -1,5 +1,9 @@
 # Release Notes
 
+## Version 1.0.3
+
+        * [SER-2280] - Add transaction logs
+
 ## Version 1.0.2
 
         * [SER-2280] - Rename Wallet Operator

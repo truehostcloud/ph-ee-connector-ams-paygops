@@ -16,6 +16,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+
 import static org.mifos.connector.ams.paygops.camel.config.CamelProperties.*;
 import static org.mifos.connector.ams.paygops.camel.config.CamelProperties.AMS_REQUEST;
 import static org.mifos.connector.ams.paygops.zeebe.ZeebeVariables.*;
@@ -86,10 +88,11 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                 .unmarshal().json(JsonLibrary.Jackson, PaygopsResponseDto.class)
                 .process(exchange -> {
                     // processing success case
+                    String transactionId = exchange.getProperty(TRANSACTION_ID, String.class);
                     try {
                         PaygopsResponseDto result = exchange.getIn().getBody(PaygopsResponseDto.class);
                         if (result.getReconciled()) {
-                            logger.info("Paygops Validation Successful");
+                            logger.info("Paygops validation successful for transaction {}", transactionId);
                             exchange.setProperty(PARTY_LOOKUP_FAILED, false);
                             exchange.setProperty("accountStatus",accountStatus.ACTIVE.toString());
                             exchange.setProperty("subStatus", "");
@@ -103,6 +106,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                             }
                             exchange.setProperty("msisdn", msisdn);
                         } else {
+                            logger.info("Reconciled field returned false. Paygops validation failed for transaction {}", transactionId);
                             setErrorCamelInfo(exchange,"Validation Unsuccessful: Reconciled field returned false",
                                     ErrorCodeEnum.RECONCILIATION.getCode(), result.toString());
 
@@ -111,7 +115,8 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                             exchange.setProperty("subStatus", "");
                         }
                     } catch (Exception e) {
-                        logger.error("Body could not be passed due to : {} ", String.valueOf(e));
+                        logger.error("Paygops validation failed for transaction {}. Body could not be parsed due to : {} ",
+                            transactionId, String.valueOf(e));
                         setErrorCamelInfo(exchange,"Body data could not be parsed,setting validation as failed",
                                 ErrorCodeEnum.DEFAULT.getCode(),exchange.getIn().getBody(String.class));
                         exchange.setProperty(PARTY_LOOKUP_FAILED, true);
@@ -120,7 +125,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                     }
                 })
                 .otherwise()
-                .log(LoggingLevel.ERROR, "Paygops Validation unsuccessful")
+                .log(LoggingLevel.ERROR, "Paygops Validation unsuccessful for transaction ${exchangeProperty." + TRANSACTION_ID + "}")
                 .process(exchange -> {
                     // processing unsuccessful case
                     String body = exchange.getIn().getBody(String.class);
@@ -142,13 +147,14 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                 .setHeader("Content-Type", constant("application/json"))
                 .setHeader("Accept-Encoding", constant("gzip;q=1.0, identity; q=0.5"))
                 .setBody(exchange -> {
-                    if(exchange.getProperty(CHANNEL_REQUEST) != null)
+                    if (exchange.getProperty(CHANNEL_REQUEST) != null)
                     {
                         JSONObject channelRequest = (JSONObject) exchange.getProperty(CHANNEL_REQUEST);
                         String transactionId = exchange.getProperty(TRANSACTION_ID, String.class);
                         PaygopsRequestDTO verificationRequestDTO = getPaygopsDtoFromChannelRequest(channelRequest,
                                 transactionId);
-                        logger.info("Validation request DTO: \n\n\n" + verificationRequestDTO);
+                        logger.info("Paygops Validation request DTO for transaction {} sent on {}: \n{}",
+                            transactionId, Instant.now(), verificationRequestDTO);
                         return verificationRequestDTO;
                     }
                     else {
@@ -157,14 +163,17 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                         log.debug(paygopsRequestDTO.toString());
                         exchange.setProperty(TRANSACTION_ID, paygopsRequestDTO.getTransactionId());
                         exchange.setProperty("accountHoldingInstitutionId", exchange.getProperty("accountHoldingInstitutionId"));
-                        logger.debug("Validation request DTO: \n\n\n" + paygopsRequestDTO);
+                        logger.info("Paygops Validation request DTO for transaction {} sent on {}: \n{}",
+                            paygopsRequestDTO.getTransactionId(), Instant.now(), paygopsRequestDTO);
                         return paygopsRequestDTO;
                     }
                 })
                 .marshal().json(JsonLibrary.Jackson)
                 .toD(getVerificationEndpoint() + "?bridgeEndpoint=true&throwExceptionOnFailure=false&"+
                         ConnectionUtils.getConnectionTimeoutDsl(amsTimeout))
-                .log(LoggingLevel.TRACE, "Paygops validation api response: \n\n..\n\n..\n\n.. ${body}");
+                .log(LoggingLevel.INFO, "Received Paygops validation response for "
+                    + "transaction ${exchangeProperty." + TRANSACTION_ID + "} on ${header.Date} with "
+                    + "status: ${header.CamelHttpResponseCode}. Body: \n ${body}");
 
         from("direct:transfer-settlement-base")
                 .id("transfer-settlement-base")
@@ -175,21 +184,24 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                 .log(LoggingLevel.INFO, "Settlement Response Received")
                 .process(exchange -> {
                     // processing success case
+                    String transactionId = exchange.getProperty(TRANSACTION_ID, String.class);
                     try {
                         String body = exchange.getIn().getBody(String.class);
                         ObjectMapper mapper = new ObjectMapper();
                         PaygopsResponseDto result = mapper.readValue(body, PaygopsResponseDto.class);
                         if (result.getReception_datetime()!=null) {
-                            logger.info("Paygops Settlement Successful");
+                            logger.info("Paygops Settlement Successful for transaction {}", transactionId);
                             exchange.setProperty(TRANSFER_SETTLEMENT_FAILED, false);
                         } else {
+                            logger.info("No reception date in response. Paygops Settlement failed for transaction {}", transactionId);
                             setErrorCamelInfo(exchange,"Settlement Unsuccessful: Response did not contain reception date",
                                     ErrorCodeEnum.RECONCILIATION.getCode(), result.toString());
 
                             exchange.setProperty(TRANSFER_SETTLEMENT_FAILED, true);
                         }
                     } catch (Exception e) {
-                        logger.error("Body could not be passed due to : {} ", String.valueOf(e));
+                        logger.error("Paygops Settlement failed for transaction {}. Body could not be parsed due to : {} ",
+                            transactionId, String.valueOf(e));
                         setErrorCamelInfo(exchange,"Body data could not be parsed,setting confirmation as failed",
                                 ErrorCodeEnum.DEFAULT.getCode(), exchange.getIn().getBody(String.class));
                         exchange.setProperty(TRANSFER_SETTLEMENT_FAILED, true);
@@ -200,7 +212,7 @@ public class PaygopsRouteBuilder extends RouteBuilder {
 
                 })
                 .otherwise()
-                .log(LoggingLevel.ERROR, "Settlement unsuccessful")
+                .log(LoggingLevel.ERROR, "Paygops Settlement unsuccessful for transaction ${exchangeProperty." + TRANSACTION_ID + "}")
                 .process(exchange -> {
                     // processing unsuccessful case
                     String body = exchange.getIn().getBody(String.class);
@@ -241,7 +253,8 @@ public class PaygopsRouteBuilder extends RouteBuilder {
 
         from("direct:transfer-settlement")
                 .id("transfer-settlement")
-                .log(LoggingLevel.INFO, "## Starting transfer settlement route")
+                .log(LoggingLevel.INFO, "## Starting transfer settlement route for "
+                    + "transaction ${exchangeProperty." + TRANSACTION_ID + "}")
                 .removeHeader("*")
                 .setHeader(Exchange.HTTP_METHOD, constant("POST"))
                 .setHeader("Authorization", simple("Bearer "+ accessToken))
@@ -251,14 +264,17 @@ public class PaygopsRouteBuilder extends RouteBuilder {
                     String transactionId = exchange.getProperty(TRANSACTION_ID, String.class);
                     PaygopsRequestDTO confirmationRequestDTO = getPaygopsDtoFromChannelRequest(channelRequest,
                             transactionId);
-                    logger.debug("Confirmation request DTO: {}",confirmationRequestDTO);
+                    logger.info("Paygops Confirmation request DTO for transaction {} sent on {}: \n{}",
+                        transactionId, Instant.now(), confirmationRequestDTO);
                     exchange.setProperty(AMS_REQUEST,confirmationRequestDTO.toString());
                     return confirmationRequestDTO;
                 })
                 .marshal().json(JsonLibrary.Jackson)
                 .toD(getConfirmationEndpoint() + "?bridgeEndpoint=true&throwExceptionOnFailure=false&" +
                         ConnectionUtils.getConnectionTimeoutDsl(amsTimeout))
-                .log(LoggingLevel.TRACE, "Paygops verification api response: \n ${body}");
+                .log(LoggingLevel.INFO, "Received Paygops confirmation response for "
+                    + "transaction ${exchangeProperty." + TRANSACTION_ID + "} on ${header.Date} with "
+                    + "status: ${header.CamelHttpResponseCode}. Body: \n ${body}");
 
     }
 
