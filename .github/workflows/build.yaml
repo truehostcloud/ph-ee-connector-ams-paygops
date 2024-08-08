@@ -5,17 +5,18 @@ on:
     branches:
       - main
       - develop
-      - 'release/*'
+      - "release/*"
 
   pull_request:
     branches:
       - main
       - develop
-      - 'release/*'
+      - "release/*"
 
-jobs:  
+jobs:
   build:
     runs-on: ubuntu-latest
+    if: false
 
     steps:
       - name: Checkout repository
@@ -37,11 +38,11 @@ jobs:
           GITHUB_PULL_BASE_SHA: ${{ github.event.pull_request.base.sha }}
           GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
           GITGUARDIAN_API_KEY: ${{ secrets.GITGUARDIAN_API_KEY }}
-    
+
       - name: Build with Gradle
         uses: eskatos/gradle-command-action@v1
         with:
-          arguments: 'bootJar :test --info --build-cache'
+          arguments: "bootJar :test --info --build-cache"
 
       - name: Login to Azure Container Registry
         uses: azure/docker-login@v1
